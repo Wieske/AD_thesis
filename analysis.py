@@ -14,7 +14,9 @@ import scikit_posthocs as sp
 
 
 def check_sub_split():
-    # Check if the models all use the same test and validation set for each split
+    """
+    Check if the models all used the same test and validation set for each split
+    """
     savedir = root / "Models" / "CNN3_run1"
     test = [np.load(savedir / ("split_" + str(n + 1)) / "sub_test.npy", allow_pickle=True) for n in range(5)]
     valid = [np.load(savedir / ("split_" + str(n + 1)) / "sub_valid.npy", allow_pickle=True) for n in range(5)]
@@ -37,6 +39,7 @@ def check_sub_split():
 def combine_history_results(root, expnr, par_reg=False, par_arch=False):
     """
     Combine all history results of multiple experiments
+    :param root: root directory
     :param expnr: the numbers of the experiments that should be combined
     :param par_reg: whether to include regularization parameters (default False)
     :param par_arch: whether to include architecture parameters (default False)
@@ -70,6 +73,7 @@ def combine_history_results(root, expnr, par_reg=False, par_arch=False):
 def combine_test_predictions(root, expnr):
     """
     Combine the test predictions of all folds for multiple models
+    :param root: root directory
     :param expnr: the numbers of the experiments that should be combined
     :return: test predictions for all experiments in expnr
     """
@@ -90,6 +94,16 @@ def combine_test_predictions(root, expnr):
 
 
 def create_violin_plot(history, column, title, labels, names=None, plotmodels=False, savepath=None):
+    """
+    Create a violin plot of the results of different experiments or models
+    :param history: dataframe with the results of the models
+    :param column: column name of dataframe that should be used
+    :param title: title of the plot
+    :param labels: experiment numbers (if plotmodels=False) or model names that should be separate
+    :param names: names that should be used for the labels on the x-axis of the plot
+    :param plotmodels: boolean that indicates if the data should be separated by model (default is by expnr)
+    :param savepath: path were figure should be saved (if None plot is instead shown)
+    """
     if names is None:
         names = labels
     runmeans = history.groupby(["model", "exp", "run"]).mean().reset_index()
@@ -123,6 +137,13 @@ def create_violin_plot(history, column, title, labels, names=None, plotmodels=Fa
 
 
 def plot_roc(y_true, y_pred, name, savepath):
+    """
+    Plot ROC curve and save to file
+    :param y_true: true classes
+    :param y_pred: predicted probabilities for class 1
+    :param name: model name for title
+    :param savepath: path where figure should be saved
+    """
     fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
     roc_auc = metrics.auc(fpr, tpr)
     plt.figure()
@@ -159,6 +180,15 @@ def calculate_metrics(grouped_pred):
 
 
 def plot_confusion(test_grouped, models, expnr, title, normalize=True, savepath=None):
+    """
+    Plot confusion matrices
+    :param test_grouped: dataframe with results grouped by experiment and model
+    :param models: dictionary with the names of the models for which a confusion matrix should be shown
+    :param expnr: experiment numbers
+    :param title: title of plot
+    :param normalize: boolean that indicates if the counts should be normalized by the true class
+    :param savepath: path where figure should be saved
+    """
     n = 1 if normalize else 3
     fig, axes = plt.subplots(n, len(models), figsize=(5 * len(models), 5.2 * n))
     for name, group in test_grouped:
@@ -204,6 +234,14 @@ def plot_confusion(test_grouped, models, expnr, title, normalize=True, savepath=
 
 
 def friedman_test(history, expnr, column="val_binary_accuracy", test="friedman"):
+    """
+    Apply friedman test and posthoc nemenyi test or wilcoxon test
+    :param history: dataframe with the results of the model
+    :param expnr: experiment numbers of the models that should be compared
+    :param column: column name of dataframe that should be used
+    :param test: either "friedman" for the friedman test or "wilcoxon" for the wilcoxon test
+    :return: results of statistical test
+    """
     data = [history[column][history.exp == i].values for i in expnr]
     if test == "friedman":
         stat, pval = stats.friedmanchisquare(*data)
@@ -213,13 +251,7 @@ def friedman_test(history, expnr, column="val_binary_accuracy", test="friedman")
         if len(data) == 2:
             return stats.wilcoxon(*data)
         else:
-            n = len(data)
-            pvals = np.ones((n, n))
-            for i in range(n):
-                for j in range(n):
-                    if i != j:
-                        _, pvals[i, j] = stats.wilcoxon(data[i], data[j])
-            return pvals
+            print("Wilcoxon can only be used to compare 2 models")
 
 
 def delete_weights(expnr):
@@ -237,14 +269,6 @@ def delete_weights(expnr):
                         path.unlink()
             print("Deleted weights of model", dirname)
 
-
-# Data augmentation and dropout: [6, 3, 7, 8, 9, 10] -> winner 7 (0.05 aug, 0 drop)
-# Batchnormalization: [7, 11] -> winner y (yes)
-# strides vs maxpool: [7, 12]
-# nr CNN layers & filters: [13, 7, 15, 16, 17]
-# (13: 4;8, 7: 5;8, 15: 5;16, 16: 6;8, 17: 6;16;averagepool)
-# multi-modal 2: [18, 20] (using all data for 18 and only complete for 20)
-# multi-modal 3: [19, 21] (training from scratch for 19 and transfer learning from exp 18 for 21)
 
 root = Path("D:/Wieske/Documents/DataScience/Thesis/Data")
 
@@ -441,7 +465,3 @@ print("Wilcoxon test for PET normal vs transfer learning: statistic: ", stat, ",
 
 stat, pval = friedman_test(history_mm3[history_mm3.model == "MM"], [19, 21], column="test_b_acc", test="wilcoxon")
 print("Wilcoxon test for MM normal vs transfer learning: statistic: ", stat, ", p value: ", pval)
-
-# results = hist.groupby(["model", "exp"]).agg({"test_acc": ["mean", "std"], "batchsize": "first"})
-# results.columns = ["test_acc_mean", "test_acc_std", "batchsize"]
-# results.to_csv(root / "Tables" / "results_regularization.csv", index=False)

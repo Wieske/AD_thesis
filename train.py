@@ -16,10 +16,23 @@ import ast
 
 
 def train_model(model, train, valid, test, savedir, nr_class, loss, metrics, learning_rate, nr_ep):
+    """
+    Train and evaluate a model and save the results and plots to a file
+    :param model: tf.keras Model instance
+    :param train: training data(generator)
+    :param valid: validation data(generator)
+    :param test: test data(generator)
+    :param savedir: directory where results and plots should be saved
+    :param nr_class: number of classes
+    :param loss: loss that should be used to train the model
+    :param metrics: metrics that should be used to evaluate the model
+    :param learning_rate: learning rate for Adam optimizer
+    :param nr_ep: maximum number of training epochs
+    :return: trained model and best results of the model
+    """
     savedir.mkdir(exist_ok=True)
     callbacks = [ModelCheckpoint(filepath=savedir / "weights", save_best_only=True, save_weights_only=True),
                  EarlyStopping(monitor='val_loss', patience=20)]
-    # TensorBoard(log_dir=savedir / "logs")
     model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss, metrics=metrics)
     history = model.fit(x=train, steps_per_epoch=len(train), validation_data=valid, validation_steps=len(valid),
                         epochs=nr_ep, verbose=2, callbacks=callbacks, max_queue_size=20, workers=8)
@@ -55,6 +68,12 @@ def train_model(model, train, valid, test, savedir, nr_class, loss, metrics, lea
 
 
 def train_evaluate_models(params):
+    """
+    Train the MRI, PET and multi-modal models using cross validation
+    :param params: dictionary with the parameters for root, df_name, rnd, batchsize, mri_shape, pet_shape, nr_splits,
+    dirname, nr_class, augmentation, dropout, model_mri and model_pet
+    :return: dataframe with the best results of the models for each cross validation split
+    """
     df = pd.read_csv(params["root"] / params["df_name"])
     savedir = params["root"] / "Models" / params["dirname"]
     savedir.mkdir(exist_ok=False)
@@ -141,6 +160,12 @@ def train_evaluate_models(params):
 
 
 def train_only_multimodal(params):
+    """
+    Train the multi-modal model with only complete data
+    :param params: dictionary with the parameters for root, df_name, rnd, batchsize, mri_shape, pet_shape, nr_splits,
+    dirname, nr_class, augmentation, dropout, model_mri and model_pet
+    :return: dataframe with the best results of the model for each cross validation split
+    """
     df = pd.read_csv(params["root"] / params["df_name"])
     savedir = params["root"] / "Models" / params["dirname"]
     savedir.mkdir(exist_ok=False)
@@ -194,7 +219,6 @@ def train_only_multimodal(params):
         hist["model"] = "COMBI"
 
         # SAVE RESULTS
-        # hist = pd.concat([history_mri, history_pet, history_combi, history_finetune], ignore_index=True)
         hist["split"] = i + 1
         hist_list.append(hist)
 
@@ -205,6 +229,14 @@ def train_only_multimodal(params):
 
 
 def transfer_learning_mci(params, loaddir):
+    """
+    Train the MRI, PET and multi-modal models for multiclass classification using the trained models from binary
+    classification as initialization (transfer learning experiment)
+    :param params: dictionary with the parameters for root, df_name, rnd, batchsize, mri_shape, pet_shape, nr_splits,
+    dirname, nr_class, augmentation, dropout, model_mri and model_pet
+    :param loaddir: directory that contains the trained models for binary classification
+    :return: dataframe with the best results of the models for each cross validation split
+    """
     df = pd.read_csv(params["root"] / params["df_name"])
     savedir = params["root"] / "Models" / params["dirname"]
     savedir.mkdir(exist_ok=False)
@@ -316,78 +348,6 @@ def transfer_learning_mci(params, loaddir):
         hist_list.append(hist)
 
     hist = pd.concat(hist_list, ignore_index=True)
-    hist.to_csv(savedir / "best_results.csv", index=False)
-
-    return hist
-
-
-def finetune_multimodal(loaddir):
-    with open(loaddir / "parameters.txt", "r") as f:
-        params = f.read()
-        params = ast.literal_eval(params.replace("WindowsPath", ""))
-
-    df = pd.read_csv(params["root"] / params["df_name"])
-    savedir = params["root"] / "Models" / params["dirname"]
-    savedir.mkdir(exist_ok=False)
-
-    # Define loss and metrics based on the number of classes
-    if params["nr_class"] == 2:
-        df = df[df["class"].isin(["CN", "AD"])]
-        loss = "binary_crossentropy"
-        metrics = ["binary_accuracy"]
-    else:
-        loss = "categorical_crossentropy"
-        metrics = ["categorical_accuracy"]
-
-    hist_list = []
-
-    # Train models
-    for i in range(5):
-        tf.keras.backend.clear_session()
-        # Create subdirectory for this split and save the test subjects:
-        savedir_split = savedir / ("split_" + str(i + 1))
-
-        # Load samples for training, validation and test set:
-        sub_test = np.load(savedir_split / "sub_test.npy", allow_pickle=True)
-        sub_valid = np.load(savedir_split / "sub_valid.npy", allow_pickle=True)
-        sub_train = np.load(savedir_split / "sub_train.npy", allow_pickle=True)
-        df_train, df_valid, df_test = [df[df["subject"].isin(sub)] for sub in [sub_train, sub_valid, sub_test]]
-
-        # Create data generators:
-        train_gen_mri, train_gen_pet, train_gen_combi = create_generators(df_train, params["mri_shape"],
-                                                                          params["pet_shape"], to_fit=True,
-                                                                          batchsize=params["batchsize"],
-                                                                          sampling="under", aug=params["augmentation"],
-                                                                          shuffle=True)
-        valid_gen_mri, valid_gen_pet, valid_gen_combi = create_generators(df_valid, params["mri_shape"],
-                                                                          params["pet_shape"], to_fit=True,
-                                                                          batchsize=params["batchsize"], sampling=None,
-                                                                          shuffle=False)
-        test_gen_mri, test_gen_pet, test_gen_combi = create_generators(df_test, params["mri_shape"],
-                                                                       params["pet_shape"], to_fit=False,
-                                                                       batchsize=params["batchsize"], sampling=None,
-                                                                       shuffle=False)
-
-        # FINETUNE COMBI MODEL
-        print("Start finetuning COMBI model for split ", i + 1, " of ", params["nr_splits"])
-        model_mri = cnn_model_mri(image_shape=params["mri_shape"], nr_class=2, drop_ratio=params["dropout"])
-        model_pet = cnn_model_pet(image_shape=params["pet_shape"], nr_class=2, drop_ratio=params["dropout"])
-        model_combi = cnn_model_combi(model_mri, model_pet, nr_class=params["nr_class"], trainable=True)
-        lr_schedule = schedules.PolynomialDecay(1e-5, 200 * len(train_gen_combi), end_learning_rate=1e-7, power=2.0)
-        model_combi.compile(optimizer=Adam(learning_rate=lr_schedule), loss=loss, metrics=metrics)
-        model_combi.load_weights(savedir_split / "combi" / "weights")
-        _, hist = train_model(model_combi, train_gen_combi, valid_gen_combi, test_gen_combi,
-                              savedir_split / "finetune_2", params["nr_class"], loss, metrics, 1e-7, 100)
-        hist["model"] = "FINETUNE_2"
-
-        # SAVE RESULTS
-        hist["split"] = i + 1
-        hist_list.append(hist)
-
-    hist = pd.concat(hist_list, ignore_index=True)
-    hist_old = pd.read_csv(savedir / "best_results.csv")
-    hist_old.to_csv(savedir / "best_results_old.csv", index=False)
-    hist = pd.concat([hist_old, hist])
     hist.to_csv(savedir / "best_results.csv", index=False)
 
     return hist
