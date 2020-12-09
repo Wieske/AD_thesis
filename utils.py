@@ -50,21 +50,23 @@ def plot_batch(generator, title=None, savepath=None):
     """
     X, y = generator.__getitem__(0)
     if y.ndim == 1:
-        labels = [{0: "NC", 1: "AD"}[label] for label in y]
+        labels = [{0: "CN", 1: "AD"}[label] for label in y]
     else:
         y = np.argmax(y, axis=1)
-        labels = [{0: "NC", 1: "MCI", 2: "AD"}[label] for label in y]
+        labels = [{0: "CN", 1: "MCI", 2: "AD"}[label] for label in y]
     fig, axes = plt.subplots(3, 4, figsize=(13, 9))
     [ax.set_axis_off() for ax in axes.ravel()]
+    fig.set_facecolor('black')
     for i in range(4):
-        axes[0, i].set_title(labels[i])
-        axes[0, i].imshow(X[i, :, :, 60, 0].T, origin="lower")
-        axes[1, i].imshow(X[i, :, 70, :, 0].T, origin="lower")
-        axes[2, i].imshow(X[i, 60, :, :, 0].T, origin="lower")
+        s = X.shape
+        axes[0, i].set_title(labels[i], c="white")
+        axes[0, i].imshow(X[i, :, :, s[3]//2, 0].T, origin="lower")
+        axes[1, i].imshow(X[i, :, s[2]//2, :, 0].T, origin="lower")
+        axes[2, i].imshow(X[i, s[1]//2, :, :, 0].T, origin="lower")
     if title is not None:
-        fig.suptitle(title, fontsize=16)
+        fig.suptitle(title, fontsize=16, c="white")
     if savepath is not None:
-        plt.savefig(savepath)
+        plt.savefig(savepath, bbox_inches="tight")
     plt.show()
 
 
