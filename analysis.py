@@ -254,22 +254,6 @@ def friedman_test(history, expnr, column="val_binary_accuracy", test="friedman")
             print("Wilcoxon can only be used to compare 2 models")
 
 
-def delete_weights(expnr):
-    # Delete the weights of the model numbers in expnr (to make room on disk)
-    for i in expnr:
-        for j in [1, 2, 3]:
-            dirname = "CNN" + str(i) + "_run" + str(j)
-            modeldir = root / "Models" / dirname
-            for n in [1, 2, 3, 4, 5]:
-                splitdir = modeldir / ("split_" + str(n))
-                for m in ["MRI", "PET", "combi"]:
-                    filename = "weights.data-00000-of-00001"
-                    path = splitdir / m / filename
-                    if path.exists():
-                        path.unlink()
-            print("Deleted weights of model", dirname)
-
-
 root = Path("D:/Wieske/Documents/DataScience/Thesis/Data")
 
 # BATCHNORMALIZATION:
