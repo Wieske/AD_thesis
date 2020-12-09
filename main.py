@@ -23,11 +23,3 @@ params = {
 }
 
 # hist = train_evaluate_models(params)
-
-from utils import create_generators, plot_batch
-
-df = pd.read_csv(params["root"] / params["df_name"])
-mri, pet, mm = create_generators(df, params["mri_shape"], params["pet_shape"], to_fit=True, batchsize=4, sampling="under", aug=0.05, shuffle=True)
-
-#plot_batch(mri, savepath=params["root"] / "Images" / "Augmentation" / "MRI_0.05.png")
-plot_batch(pet, savepath=params["root"] / "Images" / "Augmentation" / "PET_0.05.png")
